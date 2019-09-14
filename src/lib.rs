@@ -11,6 +11,7 @@ pub struct Krb5Context {
 
 impl Krb5Context {
     pub fn init() -> Result<Krb5Context, String> {
+        // FIXME: krb5_init_context is not thread-safe
         let mut context_ptr: MaybeUninit<krb5_context> = MaybeUninit::uninit();
 
         let code: krb5_error_code = unsafe { krb5_init_context(context_ptr.as_mut_ptr()) };
@@ -25,6 +26,7 @@ impl Krb5Context {
     }
 
     pub fn init_secure() -> Result<Krb5Context, String> {
+        // FIXME: krb5_init_secure_context is not thread-safe
         let mut context_ptr: MaybeUninit<krb5_context> = MaybeUninit::uninit();
 
         let code: krb5_error_code = unsafe { krb5_init_secure_context(context_ptr.as_mut_ptr()) };
@@ -193,6 +195,17 @@ pub struct Krb5PrincipalData<'a> {
     principal_data: krb5_principal_data,
 }
 
+impl<'a> Krb5PrincipalData<'a> {
+    pub fn realm(&self) -> Result<String, String> {
+        let realm: *const c_char = self.principal_data.realm.data;
+
+        match unsafe { std::ffi::CStr::from_ptr(realm) }.to_owned().into_string() {
+            Ok(string) => Ok(string),
+            Err(error) => Err(error.description().to_owned()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -217,7 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn cccol_cursor_iterate() -> Result<(), String> {
+    fn cccol_iterate() -> Result<(), String> {
         let context = Krb5Context::init()?;
         let collection = Krb5CCCol::new(&context)?;
 
@@ -229,7 +242,7 @@ mod tests {
     }
 
     #[test]
-    fn ccache_principal() -> Result<(), String> {
+    fn cccol_principals() -> Result<(), String> {
         let context = Krb5Context::init()?;
         let collection = Krb5CCCol::new(&context)?;
 
@@ -238,8 +251,8 @@ mod tests {
             let principal = ccache.principal()?;
 
             if let Some(principal) = principal {
-                let _data = principal.data();
-                println!("{:#?}", _data);
+                let data = principal.data();
+                println!("Realm: {}", data.realm()?);
             };
         }
 
