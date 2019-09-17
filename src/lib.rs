@@ -4,6 +4,13 @@ use std::os::raw::c_char;
 
 use libkrb5_sys::*;
 
+fn c_string_to_string(c_string: *const c_char) -> Result<String, String> {
+    match unsafe { std::ffi::CStr::from_ptr(c_string) }.to_owned().into_string() {
+        Ok(string) => Ok(string),
+        Err(error) => Err(error.description().to_owned()),
+    }
+}
+
 #[derive(Debug)]
 pub struct Krb5Context {
     context: krb5_context,
@@ -43,13 +50,13 @@ impl Krb5Context {
     fn code_to_message(&self, code: krb5_error_code) -> String {
         let message: *const c_char = unsafe { krb5_get_error_message(self.context, code) };
 
-        let string = match unsafe { std::ffi::CStr::from_ptr(message) }.to_owned().into_string() {
-            Ok(string) => string,
-            Err(error) => error.description().to_owned(),
-        };
-
-        unsafe { krb5_free_error_message(self.context, message) };
-        string
+        match c_string_to_string(message) {
+            Ok(string) => {
+                unsafe { krb5_free_error_message(self.context, message) };
+                string
+            },
+            Err(string) => string,
+        }
     }
 }
 
@@ -199,10 +206,7 @@ impl<'a> Krb5PrincipalData<'a> {
     pub fn realm(&self) -> Result<String, String> {
         let realm: *const c_char = self.principal_data.realm.data;
 
-        match unsafe { std::ffi::CStr::from_ptr(realm) }.to_owned().into_string() {
-            Ok(string) => Ok(string),
-            Err(error) => Err(error.description().to_owned()),
-        }
+        c_string_to_string(realm)
     }
 }
 
