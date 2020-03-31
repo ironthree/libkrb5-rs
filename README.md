@@ -6,3 +6,4 @@ This repository contains work-in-progress safe, idiomatic rust bindings for `lib
 Under the hood, it uses the unsafe, automatically generated `libkrb5-sys` bindings crate.
 
 [krb5]: https://web.mit.edu/kerberos/
+
