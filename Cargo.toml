@@ -13,5 +13,5 @@ categories = ["api-bindings"]
 keywords = ["krb5", "kerberos"]
 
 [dependencies]
-libkrb5-sys = "^0.0.1"
+libkrb5-sys = "^0.0.2"
 

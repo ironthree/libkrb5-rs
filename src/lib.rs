@@ -1,13 +1,19 @@
+#![warn(missing_docs)]
+#![warn(missing_debug_implementations)]
+
 use std::error::Error;
 use std::mem::MaybeUninit;
 use std::os::raw::c_char;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use libkrb5_sys::*;
+
+static CONTEXT_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 fn c_string_to_string(c_string: *const c_char) -> Result<String, String> {
     match unsafe { std::ffi::CStr::from_ptr(c_string) }.to_owned().into_string() {
         Ok(string) => Ok(string),
-        Err(error) => Err(error.description().to_owned()),
+        Err(error) => Err(error.to_string()),
     }
 }
 
@@ -18,31 +24,47 @@ pub struct Krb5Context {
 
 impl Krb5Context {
     pub fn init() -> Result<Krb5Context, String> {
-        // FIXME: krb5_init_context is not thread-safe
+        if CONTEXT_INITIALIZED.load(Ordering::Relaxed) {
+            return Err(String::from("Context was already initialized."));
+        }
+
+        CONTEXT_INITIALIZED.store(true, Ordering::Relaxed);
+
         let mut context_ptr: MaybeUninit<krb5_context> = MaybeUninit::uninit();
 
         let code: krb5_error_code = unsafe { krb5_init_context(context_ptr.as_mut_ptr()) };
 
-        let context = Krb5Context { context: unsafe { context_ptr.assume_init() } };
+        let context = Krb5Context {
+            context: unsafe { context_ptr.assume_init() },
+        };
 
         if code == 0 {
             Ok(context)
         } else {
+            CONTEXT_INITIALIZED.store(false, Ordering::Relaxed);
             Err(context.code_to_message(code))
         }
     }
 
     pub fn init_secure() -> Result<Krb5Context, String> {
-        // FIXME: krb5_init_secure_context is not thread-safe
+        if CONTEXT_INITIALIZED.load(Ordering::Relaxed) {
+            return Err(String::from("Context was already initialized."));
+        }
+
+        CONTEXT_INITIALIZED.store(true, Ordering::Relaxed);
+
         let mut context_ptr: MaybeUninit<krb5_context> = MaybeUninit::uninit();
 
         let code: krb5_error_code = unsafe { krb5_init_secure_context(context_ptr.as_mut_ptr()) };
 
-        let context = Krb5Context { context: unsafe { context_ptr.assume_init() } };
+        let context = Krb5Context {
+            context: unsafe { context_ptr.assume_init() },
+        };
 
         if code == 0 {
             Ok(context)
         } else {
+            CONTEXT_INITIALIZED.store(false, Ordering::Relaxed);
             Err(context.code_to_message(code))
         }
     }
@@ -65,6 +87,8 @@ impl Drop for Krb5Context {
         unsafe {
             krb5_free_context(self.context);
         }
+
+        CONTEXT_INITIALIZED.store(false, Ordering::Relaxed);
     }
 }
 
@@ -107,9 +131,8 @@ impl<'a> Iterator for Krb5CCCol<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let mut ccache_ptr: MaybeUninit<krb5_ccache> = MaybeUninit::uninit();
 
-        let code: krb5_error_code = unsafe {
-            krb5_cccol_cursor_next(self.context.context, self.cursor, ccache_ptr.as_mut_ptr())
-        };
+        let code: krb5_error_code =
+            unsafe { krb5_cccol_cursor_next(self.context.context, self.cursor, ccache_ptr.as_mut_ptr()) };
 
         if code == 0 {
             let ccache_ptr = unsafe { ccache_ptr.assume_init() };
@@ -148,9 +171,8 @@ impl<'a> Krb5CCache<'a> {
     pub fn principal(&self) -> Result<Option<Krb5Principal>, String> {
         let mut principal_ptr: MaybeUninit<krb5_principal> = MaybeUninit::uninit();
 
-        let code: krb5_error_code = unsafe {
-            krb5_cc_get_principal(self.context.context, self.ccache, principal_ptr.as_mut_ptr())
-        };
+        let code: krb5_error_code =
+            unsafe { krb5_cc_get_principal(self.context.context, self.ccache, principal_ptr.as_mut_ptr()) };
 
         if code == 0 {
             let principal_ptr = unsafe { principal_ptr.assume_init() };
@@ -189,9 +211,7 @@ impl<'a> Krb5Principal<'a> {
     pub fn data(&self) -> Krb5PrincipalData {
         Krb5PrincipalData {
             context: &self.context,
-            principal_data: unsafe {
-                *self.principal
-            },
+            principal_data: unsafe { *self.principal },
         }
     }
 }
@@ -218,6 +238,14 @@ mod tests {
     fn context_init_free() -> Result<(), String> {
         let _context = Krb5Context::init()?;
         Ok(())
+    }
+
+    #[test]
+    fn context_init_twice() {
+        let _context = Krb5Context::init().unwrap();
+        let context2 = Krb5Context::init();
+
+        assert!(context2.is_err());
     }
 
     #[test]
