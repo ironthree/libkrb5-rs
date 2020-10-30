@@ -1,7 +1,6 @@
-#![warn(missing_docs)]
-#![warn(missing_debug_implementations)]
-
 use std::error::Error;
+use std::ffi::IntoStringError;
+use std::fmt::{Display, Formatter};
 use std::mem::MaybeUninit;
 use std::os::raw::c_char;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -10,10 +9,43 @@ use libkrb5_sys::*;
 
 static CONTEXT_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
-fn c_string_to_string(c_string: *const c_char) -> Result<String, String> {
+#[derive(Debug)]
+pub enum Krb5Error {
+    AlreadyInitialized,
+    LibraryError { message: String },
+    NullPointerDereference,
+    StringConversion,
+}
+
+impl Display for Krb5Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        use Krb5Error::*;
+
+        match self {
+            AlreadyInitialized => write!(f, "Context already initialized"),
+            LibraryError { message } => write!(f, "Library error: {}", message),
+            NullPointerDereference => write!(f, "NULL Pointer dereference error"),
+            StringConversion => write!(f, "String conversion / UTF8 error"),
+        }
+    }
+}
+
+impl Error for Krb5Error {}
+
+impl From<IntoStringError> for Krb5Error {
+    fn from(_: IntoStringError) -> Self {
+        Krb5Error::StringConversion
+    }
+}
+
+fn c_string_to_string(c_string: *const c_char) -> Result<String, Krb5Error> {
+    if c_string.is_null() {
+        return Err(Krb5Error::NullPointerDereference);
+    }
+
     match unsafe { std::ffi::CStr::from_ptr(c_string) }.to_owned().into_string() {
         Ok(string) => Ok(string),
-        Err(error) => Err(error.to_string()),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -23,9 +55,9 @@ pub struct Krb5Context {
 }
 
 impl Krb5Context {
-    pub fn init() -> Result<Krb5Context, String> {
+    pub fn init() -> Result<Krb5Context, Krb5Error> {
         if CONTEXT_INITIALIZED.load(Ordering::Relaxed) {
-            return Err(String::from("Context was already initialized."));
+            return Err(Krb5Error::AlreadyInitialized);
         }
 
         CONTEXT_INITIALIZED.store(true, Ordering::Relaxed);
@@ -42,13 +74,15 @@ impl Krb5Context {
             Ok(context)
         } else {
             CONTEXT_INITIALIZED.store(false, Ordering::Relaxed);
-            Err(context.code_to_message(code))
+            Err(Krb5Error::LibraryError {
+                message: context.code_to_message(code),
+            })
         }
     }
 
-    pub fn init_secure() -> Result<Krb5Context, String> {
+    pub fn init_secure() -> Result<Krb5Context, Krb5Error> {
         if CONTEXT_INITIALIZED.load(Ordering::Relaxed) {
-            return Err(String::from("Context was already initialized."));
+            return Err(Krb5Error::AlreadyInitialized);
         }
 
         CONTEXT_INITIALIZED.store(true, Ordering::Relaxed);
@@ -65,7 +99,9 @@ impl Krb5Context {
             Ok(context)
         } else {
             CONTEXT_INITIALIZED.store(false, Ordering::Relaxed);
-            Err(context.code_to_message(code))
+            Err(Krb5Error::LibraryError {
+                message: context.code_to_message(code),
+            })
         }
     }
 
@@ -77,7 +113,7 @@ impl Krb5Context {
                 unsafe { krb5_free_error_message(self.context, message) };
                 string
             },
-            Err(string) => string,
+            Err(error) => error.to_string(),
         }
     }
 }
@@ -99,7 +135,7 @@ pub struct Krb5CCCol<'a> {
 }
 
 impl<'a> Krb5CCCol<'a> {
-    pub fn new(context: &Krb5Context) -> Result<Krb5CCCol, String> {
+    pub fn new(context: &Krb5Context) -> Result<Krb5CCCol, Krb5Error> {
         let mut cursor_ptr: MaybeUninit<krb5_cccol_cursor> = MaybeUninit::uninit();
 
         let code: krb5_error_code = unsafe { krb5_cccol_cursor_new(context.context, cursor_ptr.as_mut_ptr()) };
@@ -112,7 +148,9 @@ impl<'a> Krb5CCCol<'a> {
 
             Ok(cursor)
         } else {
-            Err(context.code_to_message(code))
+            Err(Krb5Error::LibraryError {
+                message: context.code_to_message(code),
+            })
         }
     }
 }
@@ -126,7 +164,7 @@ impl<'a> Drop for Krb5CCCol<'a> {
 }
 
 impl<'a> Iterator for Krb5CCCol<'a> {
-    type Item = Result<Krb5CCache<'a>, String>;
+    type Item = Result<Krb5CCache<'a>, Krb5Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut ccache_ptr: MaybeUninit<krb5_ccache> = MaybeUninit::uninit();
@@ -148,7 +186,9 @@ impl<'a> Iterator for Krb5CCCol<'a> {
 
             Some(Ok(ccache))
         } else {
-            Some(Err(self.context.code_to_message(code)))
+            Some(Err(Krb5Error::LibraryError {
+                message: self.context.code_to_message(code),
+            }))
         }
     }
 }
@@ -168,7 +208,7 @@ impl<'a> Drop for Krb5CCache<'a> {
 }
 
 impl<'a> Krb5CCache<'a> {
-    pub fn principal(&self) -> Result<Option<Krb5Principal>, String> {
+    pub fn principal(&self) -> Result<Option<Krb5Principal>, Krb5Error> {
         let mut principal_ptr: MaybeUninit<krb5_principal> = MaybeUninit::uninit();
 
         let code: krb5_error_code =
@@ -188,7 +228,9 @@ impl<'a> Krb5CCache<'a> {
 
             Ok(Some(principal))
         } else {
-            Err(self.context.code_to_message(code))
+            Err(Krb5Error::LibraryError {
+                message: self.context.code_to_message(code),
+            })
         }
     }
 }
@@ -223,7 +265,7 @@ pub struct Krb5PrincipalData<'a> {
 }
 
 impl<'a> Krb5PrincipalData<'a> {
-    pub fn realm(&self) -> Result<String, String> {
+    pub fn realm(&self) -> Result<String, Krb5Error> {
         let realm: *const c_char = self.principal_data.realm.data;
 
         c_string_to_string(realm)
@@ -235,7 +277,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn context_init_free() -> Result<(), String> {
+    fn context_init_free() -> Result<(), Krb5Error> {
         let _context = Krb5Context::init()?;
         Ok(())
     }
@@ -249,20 +291,20 @@ mod tests {
     }
 
     #[test]
-    fn context_secure_init_free() -> Result<(), String> {
+    fn context_secure_init_free() -> Result<(), Krb5Error> {
         let _context = Krb5Context::init_secure()?;
         Ok(())
     }
 
     #[test]
-    fn cccol_new_drop() -> Result<(), String> {
+    fn cccol_new_drop() -> Result<(), Krb5Error> {
         let context = Krb5Context::init()?;
         let _cursor = Krb5CCCol::new(&context)?;
         Ok(())
     }
 
     #[test]
-    fn cccol_iterate() -> Result<(), String> {
+    fn cccol_iterate() -> Result<(), Krb5Error> {
         let context = Krb5Context::init()?;
         let collection = Krb5CCCol::new(&context)?;
 
@@ -274,7 +316,7 @@ mod tests {
     }
 
     #[test]
-    fn cccol_principals() -> Result<(), String> {
+    fn cccol_principals() -> Result<(), Krb5Error> {
         let context = Krb5Context::init()?;
         let collection = Krb5CCCol::new(&context)?;
 

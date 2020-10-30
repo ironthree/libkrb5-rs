@@ -1,0 +1,20 @@
+[package]
+name = "libkrb5-sys"
+description = "Unsafe FFI bindings for MIT Kerberos 5 (libkrb5)"
+license = "MIT OR Apache-2.0"
+
+version = "0.0.2"
+edition = "2018"
+
+authors = ["Fabio Valentini <decathorpe@gmail.com>"]
+readme = "README.md"
+categories = ["external-ffi-bindings"]
+keywords = ["krb5", "kerberos"]
+repository = "https://github.com/ironthree/libkrb5-rs"
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "^0.55.0"
+pkg-config = "^0.3.17"
+

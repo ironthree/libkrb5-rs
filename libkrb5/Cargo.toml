@@ -1,0 +1,17 @@
+[package]
+name = "libkrb5"
+description = "rust bindings for MIT Kerberos 5"
+license = "MIT OR Apache-2.0"
+
+version = "0.0.1"
+edition = "2018"
+
+authors = ["Fabio Valentini <decathorpe@gmail.com>"]
+readme = "README.md"
+categories = ["api-bindings"]
+keywords = ["krb5", "kerberos"]
+repository = "https://github.com/ironthree/libkrb5-rs"
+
+[dependencies]
+libkrb5-sys = { path = "../libkrb5-sys", version = "^0.0.2" }
+
