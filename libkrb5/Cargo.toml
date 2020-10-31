@@ -13,5 +13,6 @@ keywords = ["krb5", "kerberos"]
 repository = "https://github.com/ironthree/libkrb5-rs"
 
 [dependencies]
+lazy_static = "^1.4.0"
 libkrb5-sys = { path = "../libkrb5-sys", version = "^0.0.2" }
 

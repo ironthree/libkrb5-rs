@@ -6,24 +6,23 @@ This repository contains both work-in-progress safe, idiomatic rust bindings for
 
 ## Thread-safety
 
-Bear in mind that `libkrb5` is not entirely thread-safe, according to its
-documentation.
+According to the libkrb5 documentation, MIT Kerberos 5 is [thread-safe] as of
+version 1.4, with the exception of context initialization and de-initialization
+functions, which are expected to not run concurrently on different threads.
+For this reason, calls to the `krb5_init_context` and `krb5_init_secure_context`
+functions as well as `krb5_free_contex` are synchronized by a global Mutex.
 
-For this reason, a Kerberos context can only be created once globally with this
-crate, and since that context does not implement `Send` or `Sync`, this only
-allows access to the `libkrb5` library on a single thread.
+**NOTE**: Running this crate's test suite with LLVM's sanitizers shows errors
+in some cases. AddressSanitizer and LeakSanitizer show no issues, but
+MemorySanitizer makes the build fail during the build of `log` (so that's
+unrelated to this crate), and ThreadSanitizer fails - apparently due to false
+positives in the `lazy_static` code (according to a [closed issue][tsan]).
 
-This also means that tests must be executed with
-`cargo test -- --test-threads 1` to pass, otherwise they must fail.
-
-In the future, this might be changed to a global context that's shared between
-threads, if I can make this work safely.
-
-## Dependencies
-
-The `libkrb5-sys` bindings link against the system installation of `libkrb5`.
-The build script uses `pkg-config` to probe for the presence of the dependency
-and uses it to determine the required linker flags.
+To my best knowledge, this library follows the documentation regarding
+thread-safe usage of libkrb5 (context initialization and teardown protected
+by a global Mutex), and all other functions in libkrb5 should be thread-safe.
 
 [krb5]: https://web.mit.edu/kerberos/
+[thread-safe]: http://web.mit.edu/Kerberos/krb5-1.4/krb5-1.4/doc/thread-safe.txt
+[tsan]: https://github.com/rust-lang-nursery/lazy-static.rs/issues/83
 

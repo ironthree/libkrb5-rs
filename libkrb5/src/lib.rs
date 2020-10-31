@@ -3,15 +3,18 @@ use std::ffi::IntoStringError;
 use std::fmt::{Display, Formatter};
 use std::mem::MaybeUninit;
 use std::os::raw::c_char;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+
+use lazy_static::lazy_static;
 
 use libkrb5_sys::*;
 
-static CONTEXT_INITIALIZED: AtomicBool = AtomicBool::new(false);
+lazy_static! {
+    static ref CONTEXT_INIT_LOCK: Mutex<()> = Mutex::new(());
+}
 
 #[derive(Debug)]
 pub enum Krb5Error {
-    AlreadyInitialized,
     LibraryError { message: String },
     NullPointerDereference,
     StringConversion,
@@ -22,7 +25,6 @@ impl Display for Krb5Error {
         use Krb5Error::*;
 
         match self {
-            AlreadyInitialized => write!(f, "Context already initialized"),
             LibraryError { message } => write!(f, "Library error: {}", message),
             NullPointerDereference => write!(f, "NULL Pointer dereference error"),
             StringConversion => write!(f, "String conversion / UTF8 error"),
@@ -56,11 +58,9 @@ pub struct Krb5Context {
 
 impl Krb5Context {
     pub fn init() -> Result<Krb5Context, Krb5Error> {
-        if CONTEXT_INITIALIZED.load(Ordering::Relaxed) {
-            return Err(Krb5Error::AlreadyInitialized);
-        }
-
-        CONTEXT_INITIALIZED.store(true, Ordering::Relaxed);
+        let _guard = CONTEXT_INIT_LOCK
+            .lock()
+            .expect("Failed to lock context initialization.");
 
         let mut context_ptr: MaybeUninit<krb5_context> = MaybeUninit::uninit();
 
@@ -73,7 +73,6 @@ impl Krb5Context {
         if code == 0 {
             Ok(context)
         } else {
-            CONTEXT_INITIALIZED.store(false, Ordering::Relaxed);
             Err(Krb5Error::LibraryError {
                 message: context.code_to_message(code),
             })
@@ -81,11 +80,9 @@ impl Krb5Context {
     }
 
     pub fn init_secure() -> Result<Krb5Context, Krb5Error> {
-        if CONTEXT_INITIALIZED.load(Ordering::Relaxed) {
-            return Err(Krb5Error::AlreadyInitialized);
-        }
-
-        CONTEXT_INITIALIZED.store(true, Ordering::Relaxed);
+        let _guard = CONTEXT_INIT_LOCK
+            .lock()
+            .expect("Failed to lock context initialization.");
 
         let mut context_ptr: MaybeUninit<krb5_context> = MaybeUninit::uninit();
 
@@ -98,7 +95,6 @@ impl Krb5Context {
         if code == 0 {
             Ok(context)
         } else {
-            CONTEXT_INITIALIZED.store(false, Ordering::Relaxed);
             Err(Krb5Error::LibraryError {
                 message: context.code_to_message(code),
             })
@@ -120,11 +116,11 @@ impl Krb5Context {
 
 impl Drop for Krb5Context {
     fn drop(&mut self) {
-        unsafe {
-            krb5_free_context(self.context);
-        }
+        let _guard = CONTEXT_INIT_LOCK
+            .lock()
+            .expect("Failed to lock context for de-initialization.");
 
-        CONTEXT_INITIALIZED.store(false, Ordering::Relaxed);
+        unsafe { krb5_free_context(self.context) };
     }
 }
 
@@ -277,17 +273,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn context_init_free() -> Result<(), Krb5Error> {
-        let _context = Krb5Context::init()?;
-        Ok(())
+    fn is_thread_safe() {
+        // assert that libkrb5 was built in thread-safe mode
+        assert_eq!(unsafe { krb5_is_thread_safe() }, 1u32);
     }
 
     #[test]
-    fn context_init_twice() {
-        let _context = Krb5Context::init().unwrap();
-        let context2 = Krb5Context::init();
-
-        assert!(context2.is_err());
+    fn context_init_free() -> Result<(), Krb5Error> {
+        let _context = Krb5Context::init()?;
+        Ok(())
     }
 
     #[test]
