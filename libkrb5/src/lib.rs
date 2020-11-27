@@ -71,7 +71,7 @@ impl Krb5Context {
             .lock()
             .expect("Failed to lock context initialization.");
 
-        let mut context_ptr: MaybeUninit<krb5_context> = MaybeUninit::uninit();
+        let mut context_ptr: MaybeUninit<krb5_context> = MaybeUninit::zeroed();
 
         let code: krb5_error_code = unsafe { krb5_init_context(context_ptr.as_mut_ptr()) };
 
@@ -89,7 +89,7 @@ impl Krb5Context {
             .lock()
             .expect("Failed to lock context initialization.");
 
-        let mut context_ptr: MaybeUninit<krb5_context> = MaybeUninit::uninit();
+        let mut context_ptr: MaybeUninit<krb5_context> = MaybeUninit::zeroed();
 
         let code: krb5_error_code = unsafe { krb5_init_secure_context(context_ptr.as_mut_ptr()) };
 
@@ -133,7 +133,7 @@ pub struct Krb5CCCol<'a> {
 
 impl<'a> Krb5CCCol<'a> {
     pub fn new(context: &Krb5Context) -> Result<Krb5CCCol, Krb5Error> {
-        let mut cursor_ptr: MaybeUninit<krb5_cccol_cursor> = MaybeUninit::uninit();
+        let mut cursor_ptr: MaybeUninit<krb5_cccol_cursor> = MaybeUninit::zeroed();
 
         let code: krb5_error_code = unsafe { krb5_cccol_cursor_new(context.context, cursor_ptr.as_mut_ptr()) };
 
@@ -160,7 +160,7 @@ impl<'a> Iterator for Krb5CCCol<'a> {
     type Item = Result<Krb5CCache<'a>, Krb5Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut ccache_ptr: MaybeUninit<krb5_ccache> = MaybeUninit::uninit();
+        let mut ccache_ptr: MaybeUninit<krb5_ccache> = MaybeUninit::zeroed();
 
         let code: krb5_error_code =
             unsafe { krb5_cccol_cursor_next(self.context.context, self.cursor, ccache_ptr.as_mut_ptr()) };
@@ -209,7 +209,7 @@ fn krb5_error_code_escape_hatch(context: &Krb5Context, code: krb5_error_code) ->
 
 impl<'a> Krb5CCache<'a> {
     pub fn default(context: &Krb5Context) -> Result<Krb5CCache, Krb5Error> {
-        let mut ccache_ptr: MaybeUninit<krb5_ccache> = MaybeUninit::uninit();
+        let mut ccache_ptr: MaybeUninit<krb5_ccache> = MaybeUninit::zeroed();
 
         let code: krb5_error_code = unsafe { krb5_cc_default(context.context, ccache_ptr.as_mut_ptr()) };
 
@@ -238,7 +238,7 @@ impl<'a> Krb5CCache<'a> {
     }
 
     pub fn dup(&self) -> Result<Krb5CCache, Krb5Error> {
-        let mut ccache_ptr: MaybeUninit<krb5_ccache> = MaybeUninit::uninit();
+        let mut ccache_ptr: MaybeUninit<krb5_ccache> = MaybeUninit::zeroed();
 
         let code: krb5_error_code = unsafe { krb5_cc_dup(self.context.context, self.ccache, ccache_ptr.as_mut_ptr()) };
 
@@ -259,7 +259,7 @@ impl<'a> Krb5CCache<'a> {
     }
 
     pub fn get_principal(&self) -> Result<Option<Krb5Principal>, Krb5Error> {
-        let mut principal_ptr: MaybeUninit<krb5_principal> = MaybeUninit::uninit();
+        let mut principal_ptr: MaybeUninit<krb5_principal> = MaybeUninit::zeroed();
 
         let code: krb5_error_code =
             unsafe { krb5_cc_get_principal(self.context.context, self.ccache, principal_ptr.as_mut_ptr()) };
@@ -298,7 +298,7 @@ impl<'a> Krb5CCache<'a> {
     pub fn new_unique(context: &'a Krb5Context, cctype: &str) -> Result<Krb5CCache<'a>, Krb5Error> {
         let cctype = string_to_c_string(cctype)?;
 
-        let mut ccache_ptr: MaybeUninit<krb5_ccache> = MaybeUninit::uninit();
+        let mut ccache_ptr: MaybeUninit<krb5_ccache> = MaybeUninit::zeroed();
 
         let code: krb5_error_code =
             unsafe { krb5_cc_new_unique(context.context, cctype, std::ptr::null(), ccache_ptr.as_mut_ptr()) };
@@ -316,7 +316,7 @@ impl<'a> Krb5CCache<'a> {
     pub fn resolve(context: &'a Krb5Context, name: &str) -> Result<Krb5CCache<'a>, Krb5Error> {
         let name = string_to_c_string(name)?;
 
-        let mut ccache_ptr: MaybeUninit<krb5_ccache> = MaybeUninit::uninit();
+        let mut ccache_ptr: MaybeUninit<krb5_ccache> = MaybeUninit::zeroed();
 
         let code: krb5_error_code = unsafe { krb5_cc_resolve(context.context, name, ccache_ptr.as_mut_ptr()) };
 
