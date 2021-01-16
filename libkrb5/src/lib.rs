@@ -18,6 +18,7 @@ pub enum Krb5Error {
     LibraryError { message: String },
     NullPointerDereference,
     StringConversion,
+    MaxVarArgsExceeded,
 }
 
 impl Display for Krb5Error {
@@ -28,6 +29,10 @@ impl Display for Krb5Error {
             LibraryError { message } => write!(f, "Library error: {}", message),
             NullPointerDereference => write!(f, "NULL Pointer dereference error"),
             StringConversion => write!(f, "String conversion / UTF8 error"),
+            MaxVarArgsExceeded => write!(
+                f,
+                "Maximum number of supported arguments for a variadic function exceeded."
+            ),
         }
     }
 }
@@ -100,6 +105,68 @@ impl Krb5Context {
         krb5_error_code_escape_hatch(&context, code)?;
 
         Ok(context)
+    }
+
+    pub fn build_principal<'a>(&'a self, realm: &'a str, args: &'a [String]) -> Result<Krb5Principal<'a>, Krb5Error> {
+        let crealm = string_to_c_string(realm)?;
+        let realml = realm.len() as u32;
+
+        let mut varargs = Vec::new();
+        for arg in args {
+            varargs.push(string_to_c_string(arg)?);
+        }
+
+        let mut principal_ptr: MaybeUninit<krb5_principal> = MaybeUninit::zeroed();
+
+        // TODO: write a macro to generate this match block
+        let code: krb5_error_code = match args.len() {
+            // varargs support in Rust is lacking, so only support a limited number of arguments for now
+            0 => unsafe { krb5_build_principal(self.context, principal_ptr.as_mut_ptr(), realml, crealm) },
+            1 => unsafe { krb5_build_principal(self.context, principal_ptr.as_mut_ptr(), realml, crealm, varargs[0]) },
+            2 => unsafe {
+                krb5_build_principal(
+                    self.context,
+                    principal_ptr.as_mut_ptr(),
+                    realml,
+                    crealm,
+                    varargs[0],
+                    varargs[1],
+                )
+            },
+            3 => unsafe {
+                krb5_build_principal(
+                    self.context,
+                    principal_ptr.as_mut_ptr(),
+                    realml,
+                    crealm,
+                    varargs[0],
+                    varargs[1],
+                    varargs[2],
+                )
+            },
+            4 => unsafe {
+                krb5_build_principal(
+                    self.context,
+                    principal_ptr.as_mut_ptr(),
+                    realml,
+                    crealm,
+                    varargs[0],
+                    varargs[1],
+                    varargs[2],
+                    varargs[3],
+                )
+            },
+            _ => return Err(Krb5Error::MaxVarArgsExceeded),
+        };
+
+        krb5_error_code_escape_hatch(self, code)?;
+
+        let principal = Krb5Principal {
+            context: self,
+            principal: unsafe { principal_ptr.assume_init() },
+        };
+
+        Ok(principal)
     }
 
     fn code_to_message(&self, code: krb5_error_code) -> String {
