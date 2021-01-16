@@ -13,11 +13,16 @@ lazy_static! {
     static ref CONTEXT_INIT_LOCK: Mutex<()> = Mutex::new(());
 }
 
+#[allow(dead_code)]
+static C_FALSE: u32 = 0;
+#[allow(dead_code)]
+static C_TRUE: u32 = 1;
+
 #[derive(Debug)]
 pub enum Krb5Error {
     LibraryError { message: String },
     NullPointerDereference,
-    StringConversion,
+    StringConversion { error: Option<IntoStringError> },
     MaxVarArgsExceeded,
 }
 
@@ -28,7 +33,12 @@ impl Display for Krb5Error {
         match self {
             LibraryError { message } => write!(f, "Library error: {}", message),
             NullPointerDereference => write!(f, "NULL Pointer dereference error"),
-            StringConversion => write!(f, "String conversion / UTF8 error"),
+            StringConversion { error } => {
+                match error {
+                    Some(error) => write!(f, "String conversion / UTF8 error: {}", error),
+                    None => write!(f, "String conversion / UTF8 error"),
+                }
+            },
             MaxVarArgsExceeded => write!(
                 f,
                 "Maximum number of supported arguments for a variadic function exceeded."
@@ -40,8 +50,8 @@ impl Display for Krb5Error {
 impl Error for Krb5Error {}
 
 impl From<IntoStringError> for Krb5Error {
-    fn from(_: IntoStringError) -> Self {
-        Krb5Error::StringConversion
+    fn from(error: IntoStringError) -> Self {
+        Krb5Error::StringConversion { error: Some(error) }
     }
 }
 
@@ -59,7 +69,7 @@ fn c_string_to_string(c_string: *const c_char) -> Result<String, Krb5Error> {
 fn string_to_c_string(string: &str) -> Result<*const c_char, Krb5Error> {
     let cstring = match CString::new(string) {
         Ok(value) => value,
-        Err(_) => return Err(Krb5Error::StringConversion),
+        Err(_) => return Err(Krb5Error::StringConversion { error: None }),
     };
 
     Ok(cstring.as_ptr())
@@ -169,7 +179,25 @@ impl Krb5Context {
         Ok(principal)
     }
 
-    fn code_to_message(&self, code: krb5_error_code) -> String {
+    // TODO: this produces invalid UTF-8?
+    /*
+    pub fn expand_hostname(&self, hostname: &str) -> Result<String, Krb5Error> {
+        let hostname_c = string_to_c_string(hostname)?;
+        let mut cstr_ptr: MaybeUninit<*mut c_char> = MaybeUninit::zeroed();
+
+        let code: krb5_error_code = unsafe { krb5_expand_hostname(self.context, hostname_c, cstr_ptr.as_mut_ptr()) };
+
+        krb5_error_code_escape_hatch(self, code)?;
+        let cstr_ptr = unsafe { cstr_ptr.assume_init() };
+
+        let result = c_string_to_string(cstr_ptr);
+        unsafe { krb5_free_string(self.context, cstr_ptr) };
+
+        result
+    }
+    */
+
+    fn error_code_to_message(&self, code: krb5_error_code) -> String {
         let message: *const c_char = unsafe { krb5_get_error_message(self.context, code) };
 
         match c_string_to_string(message) {
@@ -269,7 +297,7 @@ fn krb5_error_code_escape_hatch(context: &Krb5Context, code: krb5_error_code) ->
         Ok(())
     } else {
         Err(Krb5Error::LibraryError {
-            message: context.code_to_message(code),
+            message: context.error_code_to_message(code),
         })
     }
 }
@@ -442,7 +470,7 @@ mod tests {
     #[test]
     fn is_thread_safe() {
         // assert that libkrb5 was built in thread-safe mode
-        assert_eq!(unsafe { krb5_is_thread_safe() }, 1u32);
+        assert_eq!(unsafe { krb5_is_thread_safe() }, C_TRUE);
     }
 
     #[test]
@@ -456,6 +484,16 @@ mod tests {
         let _context = Krb5Context::init_secure()?;
         Ok(())
     }
+
+    /*
+    #[test]
+    fn expand_hostname() -> Result<(), Krb5Error> {
+        let context = Krb5Context::init()?;
+        let _expanded = context.expand_hostname("fedoraproject.org")?;
+        println!("{}", _expanded);
+        Ok(())
+    }
+    */
 
     #[test]
     fn cccol_new_drop() -> Result<(), Krb5Error> {
