@@ -12,9 +12,11 @@ categories = ["external-ffi-bindings"]
 keywords = ["krb5", "kerberos"]
 repository = "https://github.com/ironthree/libkrb5-rs"
 
+links = "krb5"
+
 [dependencies]
 
 [build-dependencies]
-bindgen = "^0.55.0"
+bindgen = "^0.56.0"
 pkg-config = "^0.3.17"
 
