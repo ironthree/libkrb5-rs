@@ -55,6 +55,25 @@ impl Krb5Context {
         Ok(context)
     }
 
+    pub fn get_default_realm(&self) -> Result<Option<String>, Krb5Error> {
+        let mut realm: MaybeUninit<*mut c_char> = MaybeUninit::zeroed();
+
+        let code: krb5_error_code = unsafe { krb5_get_default_realm(self.context, realm.as_mut_ptr()) };
+
+        if code == KRB5_CONFIG_NODEFREALM {
+            return Ok(None);
+        }
+
+        krb5_error_code_escape_hatch(self, code)?;
+
+        let realm = unsafe { realm.assume_init() };
+
+        let string = c_string_to_string(realm)?;
+        unsafe { krb5_free_default_realm(self.context, realm) };
+
+        Ok(Some(string))
+    }
+
     pub fn build_principal<'a>(&'a self, realm: &'a str, args: &'a [String]) -> Result<Krb5Principal<'a>, Krb5Error> {
         let crealm = string_to_c_string(realm)?;
         let realml = realm.len() as u32;

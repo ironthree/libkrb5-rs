@@ -18,6 +18,14 @@ fn context_secure_init_free() -> Result<(), Krb5Error> {
     Ok(())
 }
 
+#[test]
+fn get_default_realm() -> Result<(), Krb5Error> {
+    let context = Krb5Context::init()?;
+    let _realm = context.get_default_realm()?;
+    dbg!(_realm);
+    Ok(())
+}
+
 /*
 #[test]
 fn expand_hostname() -> Result<(), Krb5Error> {
