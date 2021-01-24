@@ -55,25 +55,6 @@ impl Krb5Context {
         Ok(context)
     }
 
-    pub fn get_default_realm(&self) -> Result<Option<String>, Krb5Error> {
-        let mut realm: MaybeUninit<*mut c_char> = MaybeUninit::zeroed();
-
-        let code: krb5_error_code = unsafe { krb5_get_default_realm(self.context, realm.as_mut_ptr()) };
-
-        if code == KRB5_CONFIG_NODEFREALM {
-            return Ok(None);
-        }
-
-        krb5_error_code_escape_hatch(self, code)?;
-
-        let realm = unsafe { realm.assume_init() };
-
-        let string = c_string_to_string(realm)?;
-        unsafe { krb5_free_default_realm(self.context, realm) };
-
-        Ok(Some(string))
-    }
-
     pub fn build_principal<'a>(&'a self, realm: &'a str, args: &'a [String]) -> Result<Krb5Principal<'a>, Krb5Error> {
         let crealm = string_to_c_string(realm)?;
         let realml = realm.len() as u32;
@@ -134,6 +115,57 @@ impl Krb5Context {
         };
 
         Ok(principal)
+    }
+
+    pub fn get_default_realm(&self) -> Result<Option<String>, Krb5Error> {
+        let mut realm: MaybeUninit<*mut c_char> = MaybeUninit::zeroed();
+
+        let code: krb5_error_code = unsafe { krb5_get_default_realm(self.context, realm.as_mut_ptr()) };
+
+        if code == KRB5_CONFIG_NODEFREALM {
+            return Ok(None);
+        }
+
+        krb5_error_code_escape_hatch(self, code)?;
+
+        let realm = unsafe { realm.assume_init() };
+
+        let string = c_string_to_string(realm)?;
+        unsafe { krb5_free_default_realm(self.context, realm) };
+
+        Ok(Some(string))
+    }
+
+    pub fn get_host_realms(&self, host: Option<&str>) -> Result<Vec<String>, Krb5Error> {
+        let c_host = match host {
+            Some(host) => string_to_c_string(host)?,
+            None => std::ptr::null(),
+        };
+
+        let mut c_realms: MaybeUninit<*mut *mut c_char> = MaybeUninit::zeroed();
+
+        let code: krb5_error_code = unsafe { krb5_get_host_realm(self.context, c_host, c_realms.as_mut_ptr()) };
+        krb5_error_code_escape_hatch(self, code)?;
+
+        let c_realms = unsafe { c_realms.assume_init() };
+
+        let mut realms: Vec<String> = Vec::new();
+        let mut index: isize = 0;
+        loop {
+            let ptr = unsafe { *c_realms.offset(index) };
+
+            if ptr.is_null() {
+                break;
+            }
+
+            realms.push(c_string_to_string(ptr)?);
+
+            index += 1;
+        }
+
+        unsafe { krb5_free_host_realm(self.context, c_realms) };
+
+        Ok(realms)
     }
 
     // TODO: this produces invalid UTF-8?

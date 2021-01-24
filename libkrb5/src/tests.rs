@@ -22,7 +22,13 @@ fn context_secure_init_free() -> Result<(), Krb5Error> {
 fn get_default_realm() -> Result<(), Krb5Error> {
     let context = Krb5Context::init()?;
     let _realm = context.get_default_realm()?;
-    dbg!(_realm);
+    Ok(())
+}
+
+#[test]
+fn get_host_realms() -> Result<(), Krb5Error> {
+    let context = Krb5Context::init()?;
+    let _realms = context.get_host_realms(None)?;
     Ok(())
 }
 
