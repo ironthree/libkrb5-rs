@@ -7,74 +7,63 @@ fn is_thread_safe() {
 }
 
 #[test]
-fn context_init_free() -> Result<(), Krb5Error> {
-    let _context = Krb5Context::init()?;
-    Ok(())
+fn init() {
+    let _context = Krb5Context::init().unwrap();
 }
 
 #[test]
-fn context_secure_init_free() -> Result<(), Krb5Error> {
-    let _context = Krb5Context::init_secure()?;
-    Ok(())
+fn init_secure() {
+    let _context = Krb5Context::init_secure().unwrap();
 }
 
 #[test]
-fn get_default_realm() -> Result<(), Krb5Error> {
-    let context = Krb5Context::init()?;
-    let _realm = context.get_default_realm()?;
-    Ok(())
+fn get_default_realm() {
+    let context = Krb5Context::init().unwrap();
+    let _realm = context.get_default_realm().unwrap();
 }
 
 #[test]
-fn get_host_realms() -> Result<(), Krb5Error> {
-    let context = Krb5Context::init()?;
-    let _realms = context.get_host_realms(None)?;
-    Ok(())
+fn get_host_realms() {
+    let context = Krb5Context::init().unwrap();
+    let _realms = context.get_host_realms(None).unwrap();
 }
 
 /*
 #[test]
-fn expand_hostname() -> Result<(), Krb5Error> {
-    let context = Krb5Context::init()?;
-    let _expanded = context.expand_hostname("fedoraproject.org")?;
-    println!("{}", _expanded);
-    Ok(())
+fn expand_hostname() {
+    let context = Krb5Context::init().unwrap();
+    let _expanded = context.expand_hostname("fedoraproject.org").unwrap();
 }
 */
 
 #[test]
-fn cccol_new_drop() -> Result<(), Krb5Error> {
-    let context = Krb5Context::init()?;
-    let _cursor = Krb5CCCol::new(&context)?;
-    Ok(())
+fn cccol_new() {
+    let context = Krb5Context::init().unwrap();
+    let _cursor = Krb5CCCol::new(&context).unwrap();
 }
 
 #[test]
-fn cccol_iterate() -> Result<(), Krb5Error> {
-    let context = Krb5Context::init()?;
-    let collection = Krb5CCCol::new(&context)?;
+fn cccol_iterate() {
+    let context = Krb5Context::init().unwrap();
+    let collection = Krb5CCCol::new(&context).unwrap();
 
     for ccache in collection {
-        ccache?;
+        ccache.unwrap();
     }
-
-    Ok(())
 }
 
 #[test]
-fn cccol_get_principals() -> Result<(), Krb5Error> {
-    let context = Krb5Context::init()?;
-    let collection = Krb5CCCol::new(&context)?;
+fn cccol_get_principal() {
+    let context = Krb5Context::init().unwrap();
+    let collection = Krb5CCCol::new(&context).unwrap();
 
     for ccache in collection {
-        let ccache = ccache?;
-        let principal = ccache.get_principal()?;
+        let ccache = ccache.unwrap();
+        let principal = ccache.get_principal().unwrap();
 
         if let Some(principal) = principal {
             let data = principal.data();
-            println!("Realm: {}", data.realm()?);
+            println!("Realm: {}", data.realm().unwrap());
         };
     }
-
-    Ok(())
 }
