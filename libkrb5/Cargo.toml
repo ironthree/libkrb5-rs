@@ -1,10 +1,10 @@
 [package]
 name = "libkrb5"
-description = "rust bindings for MIT Kerberos 5"
+description = "[UNMAINTAINED] Rust bindings for MIT Kerberos 5"
 license = "MIT OR Apache-2.0"
 
-version = "0.0.1"
-edition = "2018"
+version = "0.0.3"
+edition = "2021"
 
 authors = ["Fabio Valentini <decathorpe@gmail.com>"]
 readme = "README.md"
@@ -13,6 +13,9 @@ keywords = ["krb5", "kerberos"]
 repository = "https://github.com/ironthree/libkrb5-rs"
 
 [dependencies]
-lazy_static = "^1.4.0"
-libkrb5-sys = { path = "../libkrb5-sys", version = "^0.0.2" }
+lazy_static = "1.4.0"
+libkrb5-sys = { path = "../libkrb5-sys", version = "0.0.3" }
+
+[badges]
+maintenance = { status = "deprecated" }
 
